@@ -14,6 +14,7 @@ class User(BaseModel):
     email: str = Field(..., description="Email address")
     avatar_url: Optional[str] = Field(None, description="Profile image URL")
     role: Literal["user", "moderator", "admin"] = Field("user", description="Role for permissions")
+    password_hash: Optional[str] = Field(None, description="Hashed password for basic auth")
 
 class Group(BaseModel):
     name: str = Field(..., description="Group name")

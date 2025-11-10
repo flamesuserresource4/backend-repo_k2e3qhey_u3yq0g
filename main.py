@@ -1,4 +1,5 @@
 import os
+import hashlib
 from fastapi import FastAPI, HTTPException, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -27,6 +28,8 @@ def to_public(doc: dict):
     _id = d.pop("_id", None)
     if isinstance(_id, ObjectId):
         d["id"] = str(_id)
+    if "password_hash" in d:
+        d.pop("password_hash")
     return d
 
 @app.get("/")
@@ -82,6 +85,39 @@ def get_auth(role: Optional[str] = None):
             pass
         return info
     return dep
+
+# ----------------- Simple Auth (Demo) -----------------
+class RegisterRequest(BaseModel):
+    name: str
+    email: str
+    password: str
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+@app.post("/api/auth/register")
+def register(req: RegisterRequest):
+    # Check duplicate email
+    existing = get_documents("user", {"email": req.email}, 1)
+    if existing:
+        raise HTTPException(status_code=400, detail="Email already registered")
+    password_hash = hashlib.sha256(req.password.encode()).hexdigest()
+    user = User(name=req.name, email=req.email, role="user", avatar_url=None, password_hash=password_hash)
+    uid = create_document("user", user)
+    created = get_documents("user", {"_id": ObjectId(uid)}, 1)
+    return to_public(created[0]) if created else {"id": uid, "name": req.name, "email": req.email, "role": "user"}
+
+@app.post("/api/auth/login")
+def login(req: LoginRequest):
+    users = get_documents("user", {"email": req.email}, 1)
+    if not users:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    u = users[0]
+    password_hash = hashlib.sha256(req.password.encode()).hexdigest()
+    if u.get("password_hash") != password_hash:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    return to_public(u)
 
 # ----------------- Users -----------------
 @app.post("/api/users")
